@@ -1,4 +1,4 @@
-# Estoque Inteligente V2 (WhatsApp + Gemini API)
+# Estoque Inteligente (WhatsApp + Gemini API)
 
 
 
