@@ -4,7 +4,8 @@
   "main": "app.js",
   "scripts": {
     "start": "nodemon app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "check": "node --check app.js && node --check src/controllers/webhookController.js && node --check src/database/db.js && node --check src/services/geminiService.js && node --check src/services/stockService.js",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
