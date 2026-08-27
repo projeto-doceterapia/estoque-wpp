@@ -1,4 +1,5 @@
 {
   "triggerOnUpdates": true,
-  "statusCheck": true
+  "statusCheck": true,
+  "instructions": "Responda exclusivamente em português do Brasil (pt-BR). Escreva em português o resumo da pull request, os comentários em linha, os títulos, as explicações e as recomendações. Não traduza nomes de arquivos, identificadores de código ou termos técnicos quando isso prejudicar a clareza."
 }
