@@ -10,6 +10,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
 
+function responderErro(res, error) {
+    const statusBackend = error.response?.status;
+    const statusLocal = !error.isAxiosError && error.status;
+    const status = statusLocal || ([400, 404, 409, 422].includes(statusBackend) ? statusBackend : 502);
+    const mensagem = statusLocal ? error.message
+        : status === 502 ? 'Não foi possível acessar o estoque no back-end. Verifique se a API está disponível.'
+        : error.response?.data?.message || error.response?.data?.mensagem || 'O back-end recusou a operação. Confira os dados.';
+    res.status(status).json({ erro: mensagem });
+}
+
 app.post('/webhook', webhookController.handleWebhook);
 
 app.get('/api/produtos', async (req, res) => {
@@ -17,7 +27,7 @@ app.get('/api/produtos', async (req, res) => {
         const produtos = await stockService.getAllProducts();
         res.json(produtos);
     } catch (error) {
-        res.status(500).json({ erro: 'Falha ao buscar dados' });
+        responderErro(res, error);
     }
 });
 
@@ -26,7 +36,7 @@ app.post('/api/produtos', async (req, res) => {
         const novoId = await stockService.createProductManual(req.body);
         res.status(201).json({ mensagem: 'Produto criado!', id: novoId });
     } catch (error) {
-        res.status(500).json({ erro: 'Erro ao criar produto' });
+        responderErro(res, error);
     }
 });
 
@@ -36,7 +46,7 @@ app.put('/api/produtos/:id', async (req, res) => {
         if (modificado) res.json({ mensagem: 'Produto atualizado com sucesso!' });
         else res.status(404).json({ erro: 'Produto não encontrado' });
     } catch (error) {
-        res.status(500).json({ erro: 'Erro ao atualizar produto' });
+        responderErro(res, error);
     }
 });
 
@@ -46,7 +56,7 @@ app.delete('/api/produtos/:id', async (req, res) => {
         if (excluido) res.json({ mensagem: 'Produto deletado!' });
         else res.status(404).json({ erro: 'Produto não encontrado' });
     } catch (error) {
-        res.status(500).json({ erro: 'Erro ao deletar produto' });
+        responderErro(res, error);
     }
 });
 

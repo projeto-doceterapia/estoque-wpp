@@ -4,35 +4,27 @@ let statusAtual = 'todos';
 async function buscarEstoque() {
     try {
         const res = await fetch('/api/produtos');
+        if (!res.ok) throw new Error((await res.json()).erro || 'Não foi possível carregar o estoque.');
         todosProdutos = await res.json();
         processarKpis();
         atualizarPainel();
     } catch (err) {
         console.error(err);
+        alert(err.message);
     }
 }
 
 function calcularMetricas(item) {
     const qtd = parseFloat(item.quantidade) || 0;
-    let min = parseFloat(item.estoque_minimo) || 0;
-    let max = parseFloat(item.estoque_maximo) || 0;
-
-    if (min === 0) {
-        if (item.unidade_medida === 'g') min = 3000;
-        else if (item.unidade_medida === 'ml') min = 2000;
-        else min = 10;
-    }
-    if (max === 0) max = min * 2;
-
-    let porcentagem = Math.round((qtd / max) * 100);
-    if (porcentagem > 100) porcentagem = 100;
-    if (porcentagem < 0 || isNaN(porcentagem)) porcentagem = 0;
+    const min = parseFloat(item.estoque_minimo) || 0;
+    const proporcao = min > 0 ? qtd / min : 1;
+    const porcentagem = Math.round(Math.max(0, Math.min(1, proporcao)) * 100);
 
     let status = 'normal';
-    if (qtd <= min * 0.5) status = 'critico';
-    else if (qtd <= min) status = 'baixo';
+    if (proporcao <= 0.5) status = 'critico';
+    else if (proporcao < 1) status = 'baixo';
 
-    return { min, max, porcentagem, status };
+    return { min, porcentagem, status };
 }
 
 function processarKpis() {
@@ -67,15 +59,9 @@ function atualizarPainel() {
     filtrados.forEach(item => {
         const { min, porcentagem, status } = calcularMetricas(item);
         
-        let exibicaoQtd = `${item.quantidade} un.`;
-        let exibicaoMin = `${min} un.`;
-        if (item.unidade_medida === 'g') { 
-            exibicaoQtd = `${(item.quantidade/1000).toFixed(1)} kg`; 
-            exibicaoMin = `${(min/1000).toFixed(1)} kg`; 
-        } else if (item.unidade_medida === 'ml') { 
-            exibicaoQtd = `${(item.quantidade/1000).toFixed(1)} L`; 
-            exibicaoMin = `${(min/1000).toFixed(1)} L`; 
-        }
+        const rotulo = item.unidade_medida === 'unidades' ? 'un.' : item.unidade_medida;
+        const exibicaoQtd = `${item.quantidade} ${rotulo}`;
+        const exibicaoMin = `${min} ${rotulo}`;
 
         let labelStatus = `<i class="fa-regular fa-circle-check" style="margin-right: 4px;"></i> Normal`;
         if (status === 'baixo') { 
@@ -90,7 +76,7 @@ function atualizarPainel() {
             <td>
                 <div class="product-info-cell">
                     <span class="product-icon-box ${status}"><i class="fa-solid fa-cookie-bite"></i></span>
-                    <span class="product-name">${item.nome}</span>
+                    <span class="product-name"></span>
                 </div>
             </td>
             <td class="font-bold">${exibicaoQtd}</td>
@@ -109,6 +95,7 @@ function atualizarPainel() {
                 <button onclick="deletarInsumo(${item.id})" class="action-btn delete"><i class="fa-regular fa-trash-can"></i></button>
             </td>
         `;
+        tr.querySelector('.product-name').textContent = item.nome;
         tbody.appendChild(tr);
     });
 }
@@ -117,7 +104,6 @@ function abrirModalCadastro() {
     document.getElementById('insumoForm').reset();
     document.getElementById('insumoId').value = '';
     document.getElementById('modalTitle').innerText = 'Novo Insumo';
-    document.getElementById('formData').value = new Date().toISOString().split('T')[0];
     document.getElementById('insumoModal').classList.remove('hidden');
 }
 
@@ -130,12 +116,8 @@ function abrirModalEdicao(id) {
     document.getElementById('formQuantidade').value = item.quantidade;
     document.getElementById('formUnidade').value = item.unidade_medida;
     document.getElementById('formMinimo').value = item.estoque_minimo || 0;
-    document.getElementById('formMaximo').value = item.estoque_maximo || 0;
     document.getElementById('formPreco').value = item.preco;
     
-    if (item.data_compra) {
-        document.getElementById('formData').value = new Date(item.data_compra).toISOString().split('T')[0];
-    }
 
     document.getElementById('modalTitle').innerText = 'Editar Insumo';
     document.getElementById('insumoModal').classList.remove('hidden');
@@ -154,9 +136,7 @@ async function salvarInsumo(e) {
         quantidade: parseFloat(document.getElementById('formQuantidade').value),
         unidade_medida: document.getElementById('formUnidade').value,
         preco: parseFloat(document.getElementById('formPreco').value),
-        data_compra: document.getElementById('formData').value,
-        estoque_minimo: parseFloat(document.getElementById('formMinimo').value) || 0,
-        estoque_maximo: parseFloat(document.getElementById('formMaximo').value) || 0
+        estoque_minimo: parseFloat(document.getElementById('formMinimo').value) || 0
     };
 
     const url = id ? `/api/produtos/${id}` : '/api/produtos';
@@ -171,9 +151,12 @@ async function salvarInsumo(e) {
         if (res.ok) {
             fecharModal();
             buscarEstoque();
+        } else {
+            alert((await res.json()).erro || 'Não foi possível salvar o insumo.');
         }
     } catch (err) {
         console.error(err);
+        alert('Não foi possível salvar o insumo. Verifique a conexão.');
     }
 }
 
@@ -182,8 +165,10 @@ async function deletarInsumo(id) {
     try {
         const res = await fetch(`/api/produtos/${id}`, { method: 'DELETE' });
         if (res.ok) buscarEstoque();
+        else alert((await res.json()).erro || 'Não foi possível excluir o insumo.');
     } catch (err) {
         console.error(err);
+        alert('Não foi possível excluir o insumo. Verifique a conexão.');
     }
 }
 

@@ -24,9 +24,9 @@ exports.analyzeReceipt = async (mediaUrl) => {
     
     Regras:
     1. DATA: Encontre a data da compra no formato YYYY-MM-DD.
-    2. CONVERSÃO: Se o item tiver KG, multiplique a quantidade por 1000 e use unidade_medida 'g'. Se for L, multiplique por 1000 e use 'ml'. Senão, use 'unidades'.
+    2. UNIDADES: Use somente 'kg', 'g', 'L', 'ml' ou 'unidades'. Informe a quantidade total comprada na unidade escolhida. Exemplo: 2 pacotes de 1 kg de farinha = quantidade 2, unidade_medida 'kg'. Não confunda número de embalagens com peso ou volume total.
     3. NOMES GENÉRICOS: Remova marcas. "ARROZ TIO JOÃO" deve virar "ARROZ". Se o produto for conhecido pela marca (ex: "COCA-COLA"), converta para "REFRIGERANTE".
-    4. PREÇO: Use ponto decimal para o valor unitário.
+    4. PREÇO: Use ponto decimal para o custo por uma unidade_medida retornada, e não o total da linha nem o preço da embalagem. Exemplo: 2 kg por R$ 20 = preco 10 e unidade_medida 'kg'; os mesmos 2000 g por R$ 20 = preco 0.01 e unidade_medida 'g'. Se o preço não estiver legível, use null.
     
     Formato obrigatório:
     {

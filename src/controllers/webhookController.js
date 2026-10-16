@@ -14,7 +14,9 @@ exports.handleWebhook = (req, res) => {
     twiml.message('Nota recebida! A IA está processando...');
     res.type('text/xml').send(twiml.toString());
 
-    processarNota(MediaUrl0, From);
+    processarNota(MediaUrl0, From).catch((error) => {
+        console.error('[Erro] Falha ao notificar o resultado:', error.message);
+    });
 };
 
 async function processarNota(mediaUrl, senderNumber) {
@@ -33,11 +35,11 @@ async function processarNota(mediaUrl, senderNumber) {
         console.log(`[Sucesso] Processo concluído!`);
 
     } catch (error) {
-        console.error(`[Erro] Falha no fluxo:`, error);
+        console.error(`[Erro] Falha no fluxo:`, error.message);
         await client.messages.create({ 
             from: process.env.TWILIO_WHATSAPP_NUMBER, 
             to: senderNumber, 
-            body: "Ops! Ocorreu um erro ao processar sua nota fiscal." 
+            body: "Não foi possível concluir o processamento da nota. Confira o estoque antes de reenviar: alguns itens podem já ter sido gravados."
         });
     }
 }

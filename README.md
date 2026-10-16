@@ -1,140 +1,51 @@
-# Estoque Inteligente com IA e Dashboard CRUD
+﻿# Estoque WhatsApp integrado ao back-end
 
-Este projeto consiste em um sistema automatizado de controle de estoque de insumos. Ele integra um bot de WhatsApp (via Twilio) que recebe imagens de notas fiscais, processa os itens utilizando a API do Google Gemini (IA Multimodal) para padronizar nomes e unidades de medida, e atualiza automaticamente um banco de dados MySQL. Além disso, possui uma interface web completa (CRUD) para gerenciamento manual, busca, filtros e indicadores de nível de estoque (Normal, Baixo e Crítico).
+O bot recebe notas fiscais via Twilio, extrai os insumos com Gemini e grava pelos endpoints `/insumos` e `/categorias-insumo` do projeto `../back-end`. O painel em `http://localhost:3000` consulta e edita esses mesmos registros. Com o back-end configurado para H2, as alterações aparecem também no menu Estoque do front-end ao abrir ou atualizar a tela.
 
----
+## Executar
 
-## Pré-requisitos
+1. Inicie o back-end Spring Boot na porta 8080, com o H2 habilitado.
+2. Instale as dependências deste projeto com `npm install`.
+3. Copie `.env.example` para `.env` se ainda não tiver esse arquivo. Preserve suas credenciais existentes do Gemini e Twilio.
+4. Configure `BACKEND_API_URL=http://localhost:8080`. Esse já é o padrão se a variável não estiver definida. `DB_HOST`, `DB_USER`, `DB_PASSWORD` e `DB_NAME` não são mais usados pelo fluxo de estoque.
+5. Execute `npm start` e acesse `http://localhost:3000`.
 
-Antes de iniciar, certifique-se de ter instalado em sua máquina:
+Configurações adicionais:
 
-* Node.js (versão 18 ou superior)
-* MySQL Server
-* Uma conta na [Twilio](https://www.twilio.com/)
-* O [Ngrok](https://ngrok.com/) instalado e configurado
-* Uma chave de API do [Google AI Studio (Gemini)](https://aistudio.google.com/)
+- `BACKEND_IMPORT_CATEGORY`: categoria para insumos novos, padrão `Importados WhatsApp`. Criada automaticamente se ainda não existir.
+- `BACKEND_API_TOKEN`: Bearer opcional para instalações cuja API exija autenticação. A configuração atual do back-end permite acesso aos endpoints de estoque.
+- `PORT`: porta deste serviço, padrão 3000.
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER` e `GEMINI_API_KEY`: credenciais do fluxo de notas. Não são necessárias para testar apenas o painel e o serviço de estoque.
 
----
+O serviço não abre uma conexão JDBC própria: o H2 em memória pertence ao processo Java. Reiniciar o back-end apaga os dados na configuração atual (`create-drop`). Os arquivos em `src/database/` são o esquema e conector MySQL antigos, sem uso pelo fluxo atual.
 
-## Passo a Passo para Execução
+## Notas e unidades
 
-### 1. Clonar o Repositório
+Nomes são comparados ignorando maiúsculas, acentos e espaços repetidos, sem aproximações que possam misturar ingredientes diferentes. Um item existente recebe a quantidade comprada somada ao saldo atual. Categoria, mínimo, marca, status e unidade cadastrados são preservados.
 
-Abra o terminal na pasta onde deseja salvar o projeto e execute:
+As unidades aceitas são kg, g, L, ml e unidades. Por exemplo, uma compra de 500 g de um insumo cadastrado em kg soma 0,5 kg. O custo também é convertido: R$ 0,02/g vira R$ 20/kg. O preço extraído deve ser o custo por unidade de medida retornada, não o total da compra. Sem preço legível, o custo anterior é preservado. Unidades incompatíveis (como litros e quilos) são recusadas.
 
-```bash
-git clone https://github.com/seu-usuario/estoque-wpp.git
-cd estoque-wpp
+Insumos novos entram com mínimo zero; ajuste o mínimo no painel para ativar alertas. O painel usa a mesma regra do front-end: crítico até 50% do mínimo, baixo abaixo do mínimo e normal a partir dele. O back-end atual não possui data da compra nem estoque máximo; esses campos não são persistidos e foram retirados do formulário. `preco` do painel corresponde a `custoUnitario` do insumo.
 
+As rotas locais `/api/produtos` foram mantidas para compatibilidade com o painel, mas representam insumos, não o catálogo `/produtos` do back-end.
+
+As gravações deste processo são executadas em fila. Os endpoints existentes fazem uma gravação por item, sem transação de nota nem chave de idempotência: se a API falhar no meio de uma nota, alguns itens podem já estar gravados. Confira o saldo antes de reenviar uma nota após falha. Edições simultâneas por outros processos não têm controle de versão no contrato atual da API.
+
+## WhatsApp
+
+Execute `ngrok http 3000` e configure a URL pública seguida de `/webhook` em **When a message comes in**, método POST, no sandbox Twilio. Envie uma foto legível de uma nota pelo WhatsApp conectado ao sandbox. A resposta informa quantos insumos foram criados ou atualizados depois das gravações no back-end.
+
+## Validação
+
+```sh
+npm run check
+npm test
 ```
 
-### 2. Instalar as Dependências
+Os testes usam uma API simulada e não chamam Gemini, Twilio nem o banco real. Para verificar leitura, cadastro, soma com conversão, edição e exclusão no H2 local, com o back-end ativo:
 
-Instale todos os pacotes necessários do Node.js:
-
-```bash
-npm install
-
+```sh
+node scripts/verify-h2.js
 ```
 
-### 3. Configurar o Banco de Dados (MySQL)
-
-Abra o seu gerenciador de banco de dados MySQL (MySQL Workbench, terminal, etc.) e execute os comandos abaixo para criar o banco de dados e a tabela:
-
-```sql
-CREATE DATABASE IF NOT EXISTS estoque_gemini;
-
-USE estoque_gemini;
-
-CREATE TABLE IF NOT EXISTS produtos (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(255) NOT NULL,
-    quantidade DECIMAL(10, 2) DEFAULT 0,
-    unidade_medida VARCHAR(20) NOT NULL,
-    preco DECIMAL(10, 2),
-    data_compra DATE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    estoque_minimo DECIMAL(10, 2) DEFAULT 0,
-    estoque_maximo DECIMAL(10, 2) DEFAULT 0
-);
-
-```
-
-### 4. Configurar as Variáveis de Ambiente
-
-Na raiz do seu projeto, crie um arquivo chamado `.env` e preencha com as suas credenciais conforme o modelo abaixo:
-
-```env
-PORT=3000
-DB_HOST=localhost
-DB_USER=seu_usuario_do_mysql
-DB_PASS=sua_senha_do_mysql
-DB_NAME=estoque_gemini
-TWILIO_ACCOUNT_SID=seu_account_sid_da_twilio
-TWILIO_AUTH_TOKEN=seu_auth_token_da_twilio
-TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
-GEMINI_API_KEY=sua_api_key_do_gemini
-
-```
-
-### 5. Iniciar o Servidor Local
-
-Execute o comando para iniciar o servidor backend com atualização automática:
-
-```bash
-npm start
-
-```
-
-O terminal deverá exibir a mensagem indicando que o servidor está rodando na porta 3000.
-
-### 6. Configurar o Ngrok
-
-Como a aplicação roda localmente (`localhost`), precisamos criar um túnel público para que a Twilio consiga enviar as mensagens do WhatsApp para o seu código.
-
-Abra um **novo terminal** (mantenha o do servidor rodando) e execute:
-
-```bash
-ngrok http 3000
-
-```
-
-O Ngrok gerará uma URL pública segura semelhante a esta: `https://xxxx-xxxx-xxxx.ngrok-free.app`. Copie essa URL.
-
-### 7. Configurar o Sandbox do WhatsApp na Twilio
-
-1. Acesse o painel da Twilio e vá em **Messaging > Try it Out > Send a WhatsApp Message**.
-2. Conecte o seu número de WhatsApp pessoal ao Sandbox seguindo as instruções da tela (enviando o código gerado para o número informado pela Twilio).
-3. Na aba **Sandbox Settings**, localize o campo **"When a message comes in"**.
-4. Cole a URL gerada pelo Ngrok neste campo e adicione `/webhook` ao final. Exemplo:
-`https://xxxx-xxxx-xxxx.ngrok-free.app/webhook`
-5. Certifique-se de que o método ao lado está configurato como **POST**.
-6. Clique em **Save**.
-
----
-
-## Testando a Aplicação
-
-### Teste do Bot de WhatsApp
-
-1. Pelo seu WhatsApp pessoal, envie uma foto nítida de uma nota fiscal de compras para o número do Sandbox da Twilio.
-2. O bot responderá imediatamente com a mensagem: `"Nota recebida! A IA está processando..."`.
-3. O backend baixará a imagem, enviará ao Gemini para extrair e tratar os dados, atualizará as quantidades no banco de dados MySQL e, por fim, enviará uma mensagem de confirmação no seu WhatsApp detalhando quantos itens foram novos e quantos foram somados.
-
-### Teste do Dashboard Web (CRUD)
-
-1. Abra o seu navegador de internet e acesse:
-```text
-http://localhost:3000
-
-```
-
-
-2. A interface gráfica exibirá os produtos armazenados no banco de dados.
-3. Você verá os 4 cards de KPI com os totais de itens e os níveis calculados.
-4. Teste a barra de pesquisa digitando o nome de um produto.
-5. Clique nas abas "Normal", "Baixo" e "Crítico" para filtrar os resultados.
-6. Clique no botão **"+ Novo Insumo"** para preencher o formulário e cadastrar um produto manualmente.
-7. Clique no ícone de **lápis** ao lado de qualquer item na tabela para abrir o modal de edição, alterar os valores de estoque mínimo ou máximo e salvar.
-8. Clique no ícone de **lixeira** para deletar um registro e confirme a ação no alerta do navegador.
+Essa verificação cria um insumo temporário, confirma o resultado diretamente em `/insumos` e remove apenas esse registro ao terminar.
