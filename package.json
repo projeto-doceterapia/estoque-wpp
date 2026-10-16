@@ -4,7 +4,7 @@
   "main": "app.js",
   "scripts": {
     "start": "nodemon app.js",
-    "check": "node --check app.js && node --check src/controllers/webhookController.js && node --check src/database/db.js && node --check src/services/geminiService.js && node --check src/services/stockService.js",
+    "check": "node --check app.js && node --check src/controllers/webhookController.js && node --check src/services/backendClient.js && node --check src/services/geminiService.js && node --check src/services/stockService.js && node --check public/js/script.js",
     "test": "node --test"
   },
   "keywords": [],
